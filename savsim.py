@@ -55,7 +55,7 @@ if __name__=="__main__":
     topo.add_edge(1,5,link_type='c2p',latency=0.05)
     topo.add_edge(5,1,link_type='p2c',latency=0.05)
 
-    sav = SAVMechanism.EFPuRPF_A
+    sav = SAVMechanism.EFPuRPF_B
 
     router_conf = {
         1:{

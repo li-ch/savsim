@@ -80,7 +80,16 @@ class Router(object):
             else:
                 logging.error(f"time:{env.now:.4f} AS{nbr}-{topo[self.ASN][nbr]['link_type']} is not a valid link type.")
         
+        # adj_ribs_in for the entire router
         self.adj_ribs_in = defaultdict(list) # prefix -> list of paths
+        # per interface adj_ribs_in
+        # interface_id -> {prefix -> list of paths}
+        self.interface_ribs_in = {}
+        self.interface_ribs_in['local'] = defaultdict(list)
+        for interface in self.interface_to_neighbors.keys():
+            # initialize all interface ribs
+            self.interface_ribs_in[interface] = defaultdict(list)
+        
         self.prefix_origins = defaultdict(set) # prefix -> set of AS
         self.adj_ribs_out = defaultdict(list)
         # loc_ribs only have one best route for each prefix
@@ -94,6 +103,9 @@ class Router(object):
 
             self.adj_ribs_in[p].append([self.ASN])
             logging.info(f"time:{env.now:.4f} AS{self.ASN} adjRIBin added prefix {p}-AS{[self.ASN]}")
+
+            self.interface_ribs_in['local'][p].append([self.ASN])
+            logging.info(f"time:{env.now:.4f} AS{self.ASN} per interface adjRIBin added prefix {p}-AS{[self.ASN]}")
 
             self.prefix_origins[p].add(self.ASN)
             logging.info(f"time:{env.now:.4f} AS{self.ASN} prefix origins added prefix {p}-AS{self.ASN}")
@@ -154,6 +166,17 @@ class Router(object):
                     new_paths[prefix].append(received_path)
                     # update adj_ribs_in
                     self.adj_ribs_in[prefix].append(received_path)
+                    # update interface_ribs_in
+                    # todo: change self.neighbor to dictionary
+                    from_asn = received_path[0]
+                    from_interface = None
+                    for i,n in self.interface_to_neighbors.items():
+                        if n == from_asn:
+                            from_interface = i
+                    if from_interface:
+                        self.interface_ribs_in[from_interface][prefix].append(received_path)
+                    else:
+                        logging.error(f"time:{self.env.now:.4f} AS{self.ASN} cannot find interface for AS{from_asn}")
                     # update prefix origins
                     self.prefix_origins[prefix].add(received_path[0])
         
@@ -286,16 +309,66 @@ class Router(object):
     def EFP_uRPF_B(self):
         # 1.  Create the set of all directly connected customer interfaces. Call it Set I = {I1, I2, ..., Ik}.
         SetI = set()
-        for i in self.interface_to_neighbors.keys():
-            neighbor_asn = self.interface_to_neighbors[i]
-            if neighbor_asn in self.customers.keys():
-                SetI.add(neighbor_asn)
+        for _, v in self.customers.items():
+            SetI.add(v['interface'])
         # 2.  Create the set of all unique prefixes for which routes exist in Adj-RIBs-In for the interfaces in Set I. Call it Set P = {P1, P2, ..., Pm}.
+        SetPDict = {}
+        SetP = set()
         for i in list(SetI):
-            pass # todo: need per interface adj-ribs-in
+            SetPDict[i]= set(self.interface_ribs_in[i].keys())
+        for k in SetPDict.keys():
+            SetP = SetP.union(SetPDict[k])
+        
         # 3.  Create the set of all unique origin ASes seen in the routes that exist in Adj-RIBs-In for the interfaces in Set I. Call it Set A = {AS1, AS2, ..., ASn}.
+        SetA = set()
+        for i in list(SetI):
+            for prefix, paths_list in self.interface_ribs_in[i].items():
+                for path in paths_list:
+                    for asn in path:
+                        SetA.add(asn)
+
         # 4.  Create the set of all unique prefixes for which routes exist in Adj-RIBs-In of all lateral peer and transit provider interfaces such that each of the routes has its origin AS belonging in Set A. Call it Set Q = {Q1, Q2, ..., Qj}.
+        SetQ = set()
+        provider_interfaces = set()
+        for _,v in self.providers.items():
+            provider_interfaces.add(v['interface'])
+
+        provider_prefix_originates_from_A = set()
+        for i in list(provider_interfaces):
+            for prefix, paths_list in self.interface_ribs_in[i].items():
+                all_asn = set()
+                for path in paths_list:
+                    for asn in path:
+                        all_asn.add(asn)
+                x = all_asn.intersection(SetA)
+                if len(x) > 0:
+                    provider_prefix_originates_from_A.add(prefix) 
+        
+        peer_interfaces = set()
+        for _,v in self.peers.items():
+            peer_interfaces.add(v['interface'])
+
+        peer_prefix_originates_from_A = set()
+        for i in list(peer_interfaces):
+            for prefix, paths_list in self.interface_ribs_in[i].items():
+                all_asn = set()
+                for path in paths_list:
+                    for asn in path:
+                        all_asn.add(asn)
+                x = all_asn.intersection(SetA)
+                if len(x) > 0:
+                    peer_prefix_originates_from_A.add(prefix) 
+        
+        SetQ = provider_prefix_originates_from_A.union(peer_prefix_originates_from_A)
+
         # 5.  Then, Set Z = Union(P,Q) is the RPF list that is applied for every customer interface in Set I.
+        SetZ = SetP.union(SetQ)
+        for i in list(SetI):
+            # get asn
+            asn = self.interface_to_neighbors[i]
+            self.SAV_allowlist[asn] = self.SAV_allowlist[asn].union(SetZ)
+        
+        logging.info(f"time:{self.env.now:.4f} AS{self.ASN} updates allowlists {self.SAV_allowlist}")
 
     def handle_SAVNET_message(self, msg):
         logging.info(f"time:{self.env.now:.4f} AS{self.ASN} to send SAVNET message")
