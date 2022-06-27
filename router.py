@@ -19,6 +19,7 @@ class Router(object):
                  asn: int,   
                  sav_mechanism: SAVMechanism, 
                  own_prefix: list,
+                 export_policy: dict,
                  init_delay: float=0.01) -> None:
         logging.info(f"time:{env.now:.4f} Creating AS{asn}")
         self.ASN = asn
@@ -47,7 +48,7 @@ class Router(object):
                     'type':'peer', 
                     'interface':self.total_num_interface})
                 self.interface_to_neighbors[self.total_num_interface] = nbr
-                logging.info(f"time:{env.now:.4f} {nbr} added as peer to {asn} on interface {self.total_num_interface}")
+                logging.info(f"time:{env.now:.4f} AS{nbr} added as peer to AS{asn} on interface {self.total_num_interface}")
                 self.total_num_interface += 1
             
             elif topo[self.ASN][nbr]["link_type"] == "c2p":
@@ -60,7 +61,7 @@ class Router(object):
                     'type':'provider', 
                     'interface':self.total_num_interface})
                 self.interface_to_neighbors[self.total_num_interface] = nbr
-                logging.info(f"time:{env.now:.4f} {nbr} added as provider to {asn} on interface {self.total_num_interface}")
+                logging.info(f"time:{env.now:.4f} AS{nbr} added as provider to AS{asn} on interface {self.total_num_interface}")
                 self.total_num_interface += 1
             
             elif topo[self.ASN][nbr]["link_type"] == "p2c":
@@ -73,11 +74,11 @@ class Router(object):
                     'type':'customer', 
                     'interface':self.total_num_interface})
                 self.interface_to_neighbors[self.total_num_interface] = nbr
-                logging.info(f"time:{env.now:.4f} {nbr} added as customer to {asn} on interface {self.total_num_interface}")
+                logging.info(f"time:{env.now:.4f} AS{nbr} added as customer to AS{asn} on interface {self.total_num_interface}")
                 self.total_num_interface += 1
             
             else:
-                logging.error(f"time:{env.now:.4f} {nbr}-{topo[self.ASN][nbr]['link_type']} is not a valid link type.")
+                logging.error(f"time:{env.now:.4f} AS{nbr}-{topo[self.ASN][nbr]['link_type']} is not a valid link type.")
         
         self.adj_ribs_in = defaultdict(list)
         self.prefix_origins = defaultdict(set) # prefix -> set of AS
@@ -89,13 +90,18 @@ class Router(object):
         for p in self.local_prefixes:
             # loc_ribs only have one best route for each prefix
             self.loc_ribs[p] = [self.ASN] 
-            logging.info(f"time:{env.now:.4f} AS{self.ASN} local RIB updated with {p}-{self.loc_ribs[p]}")
+            logging.info(f"time:{env.now:.4f} AS{self.ASN} local RIB updated with prefix {p}-{self.loc_ribs[p]}")
+
             self.adj_ribs_in[p].append([self.ASN])
-            logging.info(f"time:{env.now:.4f} AS{self.ASN} adjRIBin added {p}-{[self.ASN]}")
+            logging.info(f"time:{env.now:.4f} AS{self.ASN} adjRIBin added prefix {p}-AS{[self.ASN]}")
+
             self.prefix_origins[p].add(self.ASN)
-            logging.info(f"time:{env.now:.4f} AS{self.ASN} prefix origins added {p}-{self.ASN}")
+            logging.info(f"time:{env.now:.4f} AS{self.ASN} prefix origins added prefix {p}-AS{self.ASN}")
+
             self.adj_ribs_out[p].append([self.ASN])
-            logging.info(f"time:{env.now:.4f} AS{self.ASN} adjRIBout added {p}-{[self.ASN]}")
+            logging.info(f"time:{env.now:.4f} AS{self.ASN} adjRIBout added prefix {p}-{[self.ASN]}")
+
+        self.export_policy = export_policy
 
         self.SAV = sav_mechanism
         self.SAV_allowlist = defaultdict(set) # ASN -> allowed prefix
@@ -172,6 +178,24 @@ class Router(object):
         self.updateRPF()
 
     def send_message(self, dst, msg):
+        # filter with BGP export policy
+        if isinstance(msg, BGPAnnouncement):
+            if len(self.export_policy) > 0:
+                filtered_payload = {}
+                if dst in self.export_policy.keys():
+                    allowed_prefix_list = self.export_policy[dst]
+                    for allowed_prefix in allowed_prefix_list:
+                        if allowed_prefix in msg.payload.keys():
+                            filtered_payload[allowed_prefix] = msg.payload[allowed_prefix]
+                filtered_message = BGPAnnouncement(
+                    msg.node_id,
+                    msg.message_id,
+                    filtered_payload)
+                logging.info(f"time:{self.env.now:.4f} AS{self.ASN} original payload: {msg.payload}")
+                logging.info(f"time:{self.env.now:.4f} AS{self.ASN} filtered payload: {filtered_payload}")
+                msg = filtered_message
+            # do nothing if there's no export policy (permissive)
+        
         latency = 1.0*self.topo[self.ASN][dst]['latency']
         logging.info(f"time:{self.env.now:.4f} AS{self.ASN} sends to AS{dst}: {msg}")
         yield self.env.timeout(latency)

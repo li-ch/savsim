@@ -60,28 +60,37 @@ if __name__=="__main__":
     router_conf = {
         1:{
             'sav': sav,
-            'own_prefixes': ['p1', 'p2', 'p3'],
-            'init_delay': randrange(1, 500, 10)/1000 # 1~500 msec
+            'own_prefixes': ['p1.1', 'p1.2', 'p1.3'],
+            'init_delay': 0, # randrange(1, 1000, 10)/1000, # 1~500 msec
+            'export_policy' : {
+                2: ['p1.1'],
+                3: ['p1.2'],
+                5: ['p1.3'],
+            },
         },
         2:{
             'sav': sav,
-            'own_prefixes': [],
-            'init_delay': randrange(1, 500, 10)/1000 # 1~500 msec
+            'own_prefixes': ['p2.1'],
+            'init_delay': 0,
+            'export_policy': {}
         },
         3:{
             'sav': sav,
-            'own_prefixes': [],
-            'init_delay': randrange(1, 500, 10)/1000 # 1~500 msec
+            'own_prefixes': ['p3.1'],
+            'init_delay': 0,
+            'export_policy': {}
         },
         4:{
             'sav': sav,
-            'own_prefixes': [],
-            'init_delay': randrange(1, 500, 10)/1000 # 1~500 msec
+            'own_prefixes': ['p4.1'],
+            'init_delay': 0,
+            'export_policy': {}
         },
         5:{
             'sav': sav,
-            'own_prefixes': [],
-            'init_delay': randrange(1, 500, 10)/1000 # 1~500 msec
+            'own_prefixes': ['p5.1'],
+            'init_delay': 0,
+            'export_policy': {}
         }, 
     }
 
@@ -92,7 +101,9 @@ if __name__=="__main__":
                    n, #ASN
                    router_conf[n]['sav'],
                    router_conf[n]['own_prefixes'],
-                   router_conf[n]['init_delay'])
+                   router_conf[n]['export_policy'],
+                   router_conf[n]['init_delay']
+                   )
         topo.nodes[n]['router'] = r # keep the reference in graph
 
     # run simulation
@@ -101,9 +112,9 @@ if __name__=="__main__":
     
     # print results
     for n in topo.nodes():
-        # logging.info(f"==== AS{n} loc_ribs  ====")
-        # logging.info(topo.nodes[n]['router'].loc_ribs)
-        # logging.info(f"====AS{n} adj_ribs_in====")
-        # logging.info(topo.nodes[n]['router'].adj_ribs_in)
+        logging.info(f"==== AS{n} loc_ribs  ====")
+        logging.info(topo.nodes[n]['router'].loc_ribs)
+        logging.info(f"====AS{n} adj_ribs_in====")
+        logging.info(topo.nodes[n]['router'].adj_ribs_in)
         logging.info(f"====AS{n} allowlist====")
         logging.info(topo.nodes[n]['router'].SAV_allowlist)
