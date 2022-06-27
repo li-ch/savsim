@@ -80,11 +80,11 @@ class Router(object):
             else:
                 logging.error(f"time:{env.now:.4f} AS{nbr}-{topo[self.ASN][nbr]['link_type']} is not a valid link type.")
         
-        self.adj_ribs_in = defaultdict(list)
+        self.adj_ribs_in = defaultdict(list) # prefix -> list of paths
         self.prefix_origins = defaultdict(set) # prefix -> set of AS
         self.adj_ribs_out = defaultdict(list)
         # loc_ribs only have one best route for each prefix
-        self.loc_ribs = {}
+        self.loc_ribs = {} # prefix -> best path
 
         self.local_prefixes = own_prefix
         for p in self.local_prefixes:
@@ -194,7 +194,8 @@ class Router(object):
                 logging.info(f"time:{self.env.now:.4f} AS{self.ASN} original payload: {msg.payload}")
                 logging.info(f"time:{self.env.now:.4f} AS{self.ASN} filtered payload: {filtered_payload}")
                 msg = filtered_message
-            # do nothing if there's no export policy (permissive)
+            else:
+                pass # do nothing if there's no export policy (permissive)
         
         latency = 1.0*self.topo[self.ASN][dst]['latency']
         logging.info(f"time:{self.env.now:.4f} AS{self.ASN} sends to AS{dst}: {msg}")
@@ -229,7 +230,7 @@ class Router(object):
                 self.env.process(self.send_message(nasn,msg)) 
     
     def updateRPF(self):
-        logging.info(f"time:{self.env.now:.4f} AS{self.ASN} updates RPF")
+        # logging.info(f"time:{self.env.now:.4f} AS{self.ASN} updates RPF")
         if self.SAV == SAVMechanism.EFPuRPF_A:
             logging.info(f"time:{self.env.now:.4f} AS{self.ASN} uses EFPuRPF-A")
             self.EFP_uRPF_A()
@@ -251,18 +252,24 @@ class Router(object):
         SetXs = defaultdict(set) # AS number -> set of prefixes originates from it.
         # logging.info(f"time:{self.env.now:.4f} AS{self.ASN} adjRIBsin: {self.adj_ribs_in}")
         for prefix, paths_list in self.adj_ribs_in.items():
-            logging.info(f"time:{self.env.now:.4f} AS{self.ASN} prefix: {prefix}, {paths_list}")
+            logging.info(f"time:{self.env.now:.4f} AS{self.ASN}'s adjRIBsin has prefix: {prefix}, path list: {paths_list}")
             for path in paths_list:
                 for asn in path:
                     if asn in self.customers.keys():
+                        logging.info(f"time:{self.env.now:.4f} AS{self.ASN}'s customer AS{asn} added to Set A")
                         SetA.add(asn)
+
+                    logging.info(f"time:{self.env.now:.4f} AS{self.ASN} prefix {prefix} added to Set X{asn}")
                     SetXs[asn].add(prefix)
+
         # logging.info(f"time:{self.env.now:.4f} AS{self.ASN} updates set A and Xs")
         logging.info(f"time:{self.env.now:.4f} AS{self.ASN} has customers:{self.customers} A-{SetA} Xs-{SetXs}")
                     
         # 3.  Include Set X1 in the RPF list on all customer interfaces on
         #     which one or more of the prefixes in Set X1 were received.
-        for a in list(SetA): # SetXs.keys():
+        # 4.  Repeat Steps 2 and 3 for each of the remaining ASes in Set A
+        #     (i.e., for ASi, where i = 2, ..., n).
+        for a in SetXs.keys(): # list(SetA):
             Xa = SetXs[a] # SetXs[a] is the set of unique prefixes that have a common origin AS-a (Xa)
             logging.info(f"time:{self.env.now:.4f} AS{self.ASN} Xa:{Xa}")
             for prefix in list(Xa):
@@ -273,9 +280,22 @@ class Router(object):
                     if asn in self.customers.keys():
                         customer_interface = self.customers[asn]['interface']
                         self.SAV_allowlist[customer_interface] = self.SAV_allowlist[customer_interface].union(Xa)
-        # 4.  Repeat Steps 2 and 3 for each of the remaining ASes in Set A
-        #     (i.e., for ASi, where i = 2, ..., n).
+
         logging.info(f"time:{self.env.now:.4f} AS{self.ASN} updates allowlists {self.SAV_allowlist}")
+    
+    def EFP_uRPF_B(self):
+        # 1.  Create the set of all directly connected customer interfaces. Call it Set I = {I1, I2, ..., Ik}.
+        SetI = set()
+        for i in self.interface_to_neighbors.keys():
+            neighbor_asn = self.interface_to_neighbors[i]
+            if neighbor_asn in self.customers.keys():
+                SetI.add(neighbor_asn)
+        # 2.  Create the set of all unique prefixes for which routes exist in Adj-RIBs-In for the interfaces in Set I. Call it Set P = {P1, P2, ..., Pm}.
+        for i in list(SetI):
+            pass # todo: need per interface adj-ribs-in
+        # 3.  Create the set of all unique origin ASes seen in the routes that exist in Adj-RIBs-In for the interfaces in Set I. Call it Set A = {AS1, AS2, ..., ASn}.
+        # 4.  Create the set of all unique prefixes for which routes exist in Adj-RIBs-In of all lateral peer and transit provider interfaces such that each of the routes has its origin AS belonging in Set A. Call it Set Q = {Q1, Q2, ..., Qj}.
+        # 5.  Then, Set Z = Union(P,Q) is the RPF list that is applied for every customer interface in Set I.
 
     def handle_SAVNET_message(self, msg):
         logging.info(f"time:{self.env.now:.4f} AS{self.ASN} to send SAVNET message")

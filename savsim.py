@@ -114,7 +114,8 @@ if __name__=="__main__":
     for n in topo.nodes():
         logging.info(f"==== AS{n} loc_ribs  ====")
         logging.info(topo.nodes[n]['router'].loc_ribs)
-        logging.info(f"====AS{n} adj_ribs_in====")
-        logging.info(topo.nodes[n]['router'].adj_ribs_in)
+        # logging.info(f"====AS{n} adj_ribs_in====")
+        # logging.info(topo.nodes[n]['router'].adj_ribs_in)
         logging.info(f"====AS{n} allowlist====")
+        logging.info(f"interface-neighbor mapping: {topo.nodes[n]['router'].interface_to_neighbors}")
         logging.info(topo.nodes[n]['router'].SAV_allowlist)
