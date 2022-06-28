@@ -8,6 +8,8 @@ Supported features:
 
 To do:
 * SAVNET
+* Implement strategies for per-interface SAV: 
+    * BCP-38 as the first strategy
 * Valley-free BGP announcement
 * Measurement and benchmarking utilities
 * Verification of SAV protocols

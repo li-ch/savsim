@@ -11,7 +11,6 @@ from message import SAVMechanism
 if __name__=="__main__":
     env = simpy.Environment()
     logging.basicConfig(filename='savsim.log', filemode='w', format="%(levelname)s - %(message)s",level=logging.INFO)
-    # format="%(asctime)s %(levelname)s - %(message)s"
 
     # Topology from RFC8704
     #          +----------+   P3[AS5 AS1]  +------------+
@@ -56,6 +55,8 @@ if __name__=="__main__":
     topo.add_edge(5,1,link_type='p2c',latency=0.05)
 
     sav = SAVMechanism.EFPuRPF_B
+    # SAV mechanism needs to be per interface
+    # todo: Follow BCP-38
 
     router_conf = {
         1:{
@@ -91,7 +92,7 @@ if __name__=="__main__":
             'own_prefixes': ['p5.1'],
             'init_delay': 0,
             'export_policy': {}
-        }, 
+        },
     }
 
     # setup routers
