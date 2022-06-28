@@ -8,5 +8,6 @@ Supported features:
 
 To do:
 * SAVNET
+* Valley-free BGP announcement
 * Measurement and benchmarking utilities
 * Verification of SAV protocols
